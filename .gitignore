@@ -1,0 +1,8 @@
+*.log
+ira_collab/images/*
+ira_collab/__pycache__/*
+ira_collab/logs/*
+*.png
+*.jpg
+*.jpeg
+*.mp3
