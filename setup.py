@@ -28,6 +28,7 @@ setup(
             'eye_node = ira_collab.eye_node:main',
             'gpt_node = ira_collab.gpt_node:main',
             'interaction_node = ira_collab.interaction_node:main',
+            'ready_check_server = ira_collab.ready_check_server:main',
         ],
     },
 )

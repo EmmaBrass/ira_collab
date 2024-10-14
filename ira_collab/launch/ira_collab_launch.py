@@ -76,5 +76,11 @@ def generate_launch_description():
             ],
             output='screen',
             arguments=['--ros-args', '--log-level', 'INFO']
+        ),
+        Node(
+            package='ira_collab',
+            executable='ready_check_server',
+            name='ready_check_server',
+            output='screen',
         )
     ])

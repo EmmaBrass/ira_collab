@@ -16,6 +16,7 @@ from ira_interfaces.msg import ArmComplete
 from ira_interfaces.msg import GptComplete
 from ira_interfaces.msg import FoiCoord
 from ira_interfaces.msg import CanvasImage
+from ira_interfaces.srv import ReadyCheck
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -52,6 +53,11 @@ class InteractionNode(Node):
 
         timer_period = 2  # seconds
         self.timer = self.create_timer(timer_period, self.timer_callback) # Publishing happens within the timer_callback
+
+        # Create a service client to wait for user confirmation
+        self.ready_service_client = self.create_client(ReadyCheck, 'check_ready')
+        while not self.ready_service_client.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Service not available, waiting...')
 
         # Initialise subscribers
         self.latest_image_subscription = self.create_subscription(
@@ -156,8 +162,22 @@ class InteractionNode(Node):
         Wait for human keyboard input to save the canvas is ready before sending the pic...
         """
         self.get_logger().info(f'In startup_ready method')
+        
         # Human input to confirm canvas is ready
-        done = input("Please press enter when done placing canvas. ENSURE CORRECT LIGHTING.")
+        # Call the service to ask for readiness confirmation
+        req = ReadyCheck.Request()
+        req.ready = True
+
+        self.future = self.ready_service_client.call_async(req)
+        rclpy.spin_until_future_complete(self, self.future)
+
+        if self.future.result().acknowledged:
+            self.get_logger().info("User acknowledged that the canvas is ready.")
+            self.state_machine.to_startup_pic()
+        else:
+            self.get_logger().info("User did not acknowledge readiness.")
+
+        #done = input("Please press enter when done placing canvas. ENSURE CORRECT LIGHTING.")
         time.sleep(1)
         self.state_machine.to_startup_pic()
 

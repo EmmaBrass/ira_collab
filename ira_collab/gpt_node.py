@@ -67,7 +67,7 @@ class GPTNode(Node):
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <startup_ready>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
-            if msg.state == 'startup_pic':
+            elif msg.state == 'startup_pic':
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <startup_pic>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
