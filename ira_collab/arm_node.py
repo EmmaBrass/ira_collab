@@ -59,10 +59,15 @@ class ArmNode(Node):
         Save the most recent cropped foi image.
         """
         self.get_logger().info("In canvas_image_callback")
+        if msg.type == "initial":
+            self.initial_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
+            self.movements.initial_image(self.initial_canvas_image)
         if msg.type == "before":
             self.before_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
+            self.movements.before_image(self.before_canvas_image)
         if msg.type == "after":
             self.after_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
+            self.movements.after_image(self.after_canvas_image)
 
     def system_state_callback(self, msg):
         """
@@ -74,19 +79,20 @@ class ArmNode(Node):
                 self.arm_complete(msg.seq)
             else:
                 if msg.state == 'startup_ready':
-                    self.movements.look_forward()
+                    self.movements.initial_position()
                     self.arm_complete(msg.seq)
                 if msg.state == 'startup_pic':
                     self.movements.look_at_canvas()
                     self.arm_complete(msg.seq)
                 if msg.state == 'your_turn':
+                    self.movements.canvas_initialise()
                     self.movements.lift_up()
                     self.arm_complete(msg.seq)
                 if msg.state == 'your_turn_pic':
                     self.movements.look_at_canvas()
                     self.arm_complete(msg.seq)
                 if msg.state == 'comment':
-                    self.movements.look_forward()
+                    self.movements.initial_position()
                     self.arm_complete(msg.seq)
                 if msg.state == 'my_turn':
                     self.movements.paint_abstract_mark()
@@ -95,7 +101,7 @@ class ArmNode(Node):
                     self.movements.look_at_canvas()
                     self.arm_complete(msg.seq)
                 if msg.state == 'ask_done':
-                    self.movements.look_forward()
+                    self.movements.initial_position()
                     self.arm_complete(msg.seq)
                 if msg.state == 'completed':
                     self.movements.acknowledge()

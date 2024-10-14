@@ -6,7 +6,7 @@ from sensor_msgs.msg import CameraInfo, Image
 from cv_bridge import CvBridge, CvBridgeError
 bridge = CvBridge()
 
-from ira_common.collab_gpt import GPT
+from ira_common.general_gpt import GPT
 
 from ira_interfaces.msg import GptComplete
 from ira_interfaces.msg import SystemState
@@ -21,8 +21,11 @@ class GPTNode(Node):
         self.declare_parameter('sim', False)
         self.sim_mode = self.get_parameter('sim').get_parameter_value().bool_value
 
-        self.gpt = GPT()
+        self.gpt = GPT(collab=True)
         self.state_seq = -1
+
+        # To track whether still painting in my_turn
+        self.still_painting = False
         
         self.canvas_image = None
 
@@ -58,7 +61,7 @@ class GPTNode(Node):
         """
         Callback function for the system state.
         """
-        if msg.seq > self.state_seq:
+        if msg.seq > self.state_seq or self.still_painting == True:
             self.state_seq = msg.seq
             if msg.state == 'startup_ready':
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <startup_ready>")
@@ -79,16 +82,19 @@ class GPTNode(Node):
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <comment>")
                 self.gpt_complete(msg.seq)
             elif msg.state == 'my_turn':
-                response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn>")
-                self.get_logger().info(response)
-                self.gpt_complete(msg.seq)
-                time.sleep(30)
-                response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <still_my_turn>") #TODO way to check this rather than just a timer...
-                # Like don't work about the seq for painting, just check some timer or an extra counter or something so we can come back here again.  
-                # Will be useful for the normal IRa project as well whilst still painting.
-                self.get_logger().info(response)
-                self.gpt_complete(msg.seq)
+                if self.still_painting == False:
+                    response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn>")
+                    self.get_logger().info(response)
+                    self.gpt_complete(msg.seq)
+                    self.still_painting = True
+                elif self.still_painting == True:
+                    time.sleep(5)
+                    response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <still_my_turn>") 
+                    self.get_logger().info(response)
+                    self.gpt_complete(msg.seq)
             elif msg.state == 'my_turn_pic':
+                self.still_painting = False
+                time.sleep(3) # give time for arm to look down so it seems like IRA has seen her work before she comments.
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn_pic>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)

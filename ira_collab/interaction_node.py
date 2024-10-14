@@ -9,7 +9,7 @@ from datetime import datetime
 import numpy as np
 import face_recognition
 from ira_common.face import Face
-from ira.interaction_state_machine import InterationStateMachine
+from ira_collab.interaction_state_machine import InterationStateMachine
 
 from ira_interfaces.msg import SystemState
 from ira_interfaces.msg import ArmComplete
@@ -36,6 +36,7 @@ class InteractionNode(Node):
         self.state_machine = InterationStateMachine()
 
         self.latest_image = None
+        self.initial_canvas_image = None
         self.before_canvas_image = None
         self.after_canvas_image = None
 
@@ -130,16 +131,20 @@ class InteractionNode(Node):
             self.prev_gpt_complete.append(False)
             self.get_logger().info(f'Current self.seq: {self.seq}')
             # Run a function for the given state, to tick the state machine forwards by one.
-            if self.state_machine.state == 'startup':
-                self.startup()
+            if self.state_machine.state == 'startup_ready':
+                self.startup_ready()
+            elif self.state_machine.state == 'startup_pic':
+                self.startup_pic()
             elif self.state_machine.state == 'your_turn':
                 self.your_turn()
-            elif self.state_machine.state == 'looking':
-                self.looking()
+            elif self.state_machine.state == 'your_turn_pic':
+                self.your_turn_pic()
             elif self.state_machine.state == 'comment':
                 self.comment()
             elif self.state_machine.state == 'my_turn':
                 self.my_turn()
+            elif self.state_machine.state == 'my_turn_pic':
+                self.my_turn_pic()
             elif self.state_machine.state == 'ask_done':
                 self.ask_done()
             elif self.state_machine.state == 'completed':
@@ -151,7 +156,9 @@ class InteractionNode(Node):
         Wait for human keyboard input to save the canvas is ready before sending the pic...
         """
         self.get_logger().info(f'In startup_ready method')
-        # TODO human input to confirm canvas is ready
+        # Human input to confirm canvas is ready
+        done = input("Please press enter when done placing canvas. ENSURE CORRECT LIGHTING.")
+        time.sleep(1)
         self.state_machine.to_startup_pic()
 
     def startup_pic(self):
@@ -162,9 +169,9 @@ class InteractionNode(Node):
         Publish a before canvas image.
         """
         self.get_logger().info(f'In startup_pic method')
-        self.before_canvas_image = self.latest_image
+        self.initial_canvas_image = self.latest_image
         msg = CanvasImage()
-        msg.image = self.bridge.cv2_to_imgmsg(self.before_canvas_image, "bgr8")
+        msg.image = self.bridge.cv2_to_imgmsg(self.initial_canvas_image, "bgr8")
         msg.type = "before"
         for i in range(5):
             self.canvas_image_publisher.publish(msg) 
@@ -177,12 +184,15 @@ class InteractionNode(Node):
         """
         self.get_logger().info(f'In your_turn method')
         self.num_turns += 1
-        self.state_machine.to_looking()
+        # Human input to confirm canvas is ready
+        done = input("Please press enter when done with your turn.")
+        self.state_machine.to_your_turn_pic()
 
-    def looking(self):
+    def your_turn_pic(self):
         """
         Method for IRA to look at the canvas, take a pic 
         for after_canvas_image, and publish it.
+        Arm will have moved to face down to look at canvas.
         """
         self.get_logger().info(f'In looking method')
         # When we are in this method, the arm will already be facing down, looking at the canvas.
@@ -200,24 +210,19 @@ class InteractionNode(Node):
         Method for commenting on the human mark.
         The GPT will have commented.
         """
-        self.get_logger().info(f'In comment method')
+        self.get_logger().info(f'In comment method') # TODO correct file path for image_gpt.
         self.state_machine.to_my_turn()
 
     def my_turn(self):
         """ 
         Method for IRA taking her turn, saying something while doing it.
-        and taking a reference pic at the end.
         """
         self.get_logger().info(f'In my_turn method')
-        if self.num_turns > 7:
-            self.state_machine.to_ask_done()
-        else:
-            self.state_machine.to_your_turn()
-
+        
     def my_turn_pic(self):
         """
         IRA looks down and takes a pic of the canvas for before_canvas_image.
-        Says something about how nice their mark is.
+        Has said something about how nice their own mark is.
         """
         self.get_logger().info(f'In my_turn_pic method')
         self.before_canvas_image = self.latest_image
@@ -226,16 +231,31 @@ class InteractionNode(Node):
         msg.type = "before"
         for i in range(5):
             self.canvas_image_publisher.publish(msg) 
+        if self.num_turns > 7:
+            self.state_machine.to_ask_done()
+        else:
+            self.state_machine.to_your_turn()
 
     def ask_done(self):
         """
         Method for asking the human if the painting is done.
         """
         self.get_logger().info(f'In ask_done method')
-        # TODO get user input for if done or not (keyboard).
-        self.state_machine.to_your_turn()
-        self.state_machine.to_completed()
-n
+        # Human input for if done or not (keyboard).
+        done = input("Please press y and enter if you think the painting is done, \
+            or n and enter if you want to keep going.")
+        while done != "n" and done != "y":
+            if done == "n":
+                self.state_machine.to_your_turn()
+                break
+            elif done == "y":
+                self.state_machine.to_completed()
+                break
+            else:
+                print("Unknown input!")
+            done = input("Please press y and enter if you think the painting is done, \
+            or n and enter if you want to keep going.")
+
     def completed(self):
         """
         Method for a finished piece.

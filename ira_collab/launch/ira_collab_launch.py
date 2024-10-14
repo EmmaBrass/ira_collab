@@ -29,6 +29,7 @@ def generate_launch_description():
                 {'cam_port': '4'},
                 {'log_level': 'INFO'}
             ],
+            output='screen',
             arguments=['--ros-args', '--log-level', 'INFO']
         ),
         Node(
@@ -39,6 +40,7 @@ def generate_launch_description():
                 {'sim': LaunchConfiguration('sim')},
                 {'log_level': 'INFO'}
             ],
+            output='screen',
             arguments=['--ros-args', '--log-level', 'INFO']
         ),
         Node(
@@ -49,6 +51,7 @@ def generate_launch_description():
                 {'sim': LaunchConfiguration('sim')},
                 {'log_level': 'INFO'}
             ],
+            output='screen',
             arguments=['--ros-args', '--log-level', 'INFO']
         ),
         Node(
@@ -60,6 +63,7 @@ def generate_launch_description():
                 {'eyes_port': '/dev/ttyACM0'},
                 {'log_level': 'INFO'}
             ],
+            output='screen',
             arguments=['--ros-args', '--log-level', 'INFO']
         ),
         Node(
@@ -70,6 +74,7 @@ def generate_launch_description():
                 {'sim': LaunchConfiguration('sim')},
                 {'log_level': 'INFO'}
             ],
+            output='screen',
             arguments=['--ros-args', '--log-level', 'INFO']
         )
     ])

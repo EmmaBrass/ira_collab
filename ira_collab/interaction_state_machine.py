@@ -37,9 +37,9 @@ class InterationStateMachine():
             model=self, 
             states=InterationStateMachine.states, 
             transitions=InterationStateMachine.transitions, 
-            initial='scanning'
+            initial='startup_ready'
         )
 
 
-
-# TODO Add in a user input check state for if the canvas/paper and paint are ready. 
+# TODO does not currently comment on it's own paint mark (just takes a pic for comparison)
+# Could comment on it's own paint mark in the future.
