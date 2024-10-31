@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
 from cv_bridge import CvBridge, CvBridgeError
-bridge = CvBridge()
+
 
 import cv2, pickle, os, time
 from datetime import datetime
@@ -11,12 +11,16 @@ import face_recognition
 from ira_common.face import Face
 from ira_collab.interaction_state_machine import InterationStateMachine
 
-from ira_interfaces.msg import SystemState
-from ira_interfaces.msg import ArmComplete
-from ira_interfaces.msg import GptComplete
-from ira_interfaces.msg import FoiCoord
-from ira_interfaces.msg import CanvasImage
-from ira_interfaces.srv import ReadyCheck
+from ira_interfaces.msg import (
+    SystemState,
+    ArmComplete,
+    GptComplete,
+    FoiCoord,
+    CanvasImage
+)
+from ira_interfaces.srv import (
+    ReadyCheck
+)
 
 from ament_index_python.packages import get_package_share_directory
 
@@ -35,6 +39,8 @@ class InteractionNode(Node):
         self.data_file_path = os.path.join(package_share_directory, 'resource', 'dataset_faces.dat')
         
         self.state_machine = InterationStateMachine()
+        
+        self.bridge = CvBridge()
 
         self.latest_image = None
         self.initial_canvas_image = None
@@ -42,6 +48,8 @@ class InteractionNode(Node):
         self.after_canvas_image = None
 
         self.num_turns = 0
+
+        self.waiting_for_keyboard = False
 
         self.seq = 0
         self.prev_gpt_complete = [False]
@@ -93,7 +101,7 @@ class InteractionNode(Node):
         Loads it in as the latest image.
         """
         # Display the message on the console
-        self.latest_image = bridge.imgmsg_to_cv2(msg, 'bgr8')
+        self.latest_image = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
 
     def arm_complete_callback(self, msg):
         """
@@ -126,35 +134,37 @@ class InteractionNode(Node):
         Publishes to system_state topic.
         and publishes to other topics if in the appropriate state.
         """
-        self.get_logger().info(f'Current system state: {self.state_machine.state}')
-        # Publish the current state, to start arm and GPT processes.
-        self.publish_state(str(self.state_machine.state))
-        
-        # If arm and GPT processes completed, tick the state forward.
-        if self.prev_arm_complete[self.seq] == True and self.prev_gpt_complete[self.seq] == True:
-            self.seq += 1 
-            self.prev_arm_complete.append(False)
-            self.prev_gpt_complete.append(False)
-            self.get_logger().info(f'Current self.seq: {self.seq}')
-            # Run a function for the given state, to tick the state machine forwards by one.
-            if self.state_machine.state == 'startup_ready':
-                self.startup_ready()
-            elif self.state_machine.state == 'startup_pic':
-                self.startup_pic()
-            elif self.state_machine.state == 'your_turn':
-                self.your_turn()
-            elif self.state_machine.state == 'your_turn_pic':
-                self.your_turn_pic()
-            elif self.state_machine.state == 'comment':
-                self.comment()
-            elif self.state_machine.state == 'my_turn':
-                self.my_turn()
-            elif self.state_machine.state == 'my_turn_pic':
-                self.my_turn_pic()
-            elif self.state_machine.state == 'ask_done':
-                self.ask_done()
-            elif self.state_machine.state == 'completed':
-                self.completed()
+
+        if self.waiting_for_keyboard == False:
+            self.get_logger().info(f'Current system state: {self.state_machine.state}')
+            # Publish the current state, to start arm and GPT processes.
+            self.publish_state(str(self.state_machine.state))
+            
+            # If arm and GPT processes completed, tick the state forward.
+            if self.prev_arm_complete[self.seq] == True and self.prev_gpt_complete[self.seq] == True:
+                self.seq += 1 
+                self.prev_arm_complete.append(False)
+                self.prev_gpt_complete.append(False)
+                self.get_logger().info(f'Current self.seq: {self.seq}')
+                # Run a function for the given state, to tick the state machine forwards by one.
+                if self.state_machine.state == 'startup_ready':
+                    self.startup_ready()
+                elif self.state_machine.state == 'startup_pic':
+                    self.startup_pic()
+                elif self.state_machine.state == 'your_turn':
+                    self.your_turn()
+                elif self.state_machine.state == 'your_turn_pic':
+                    self.your_turn_pic()
+                elif self.state_machine.state == 'comment':
+                    self.comment()
+                elif self.state_machine.state == 'my_turn':
+                    self.my_turn()
+                elif self.state_machine.state == 'my_turn_pic':
+                    self.my_turn_pic()
+                elif self.state_machine.state == 'ask_done':
+                    self.ask_done()
+                elif self.state_machine.state == 'completed':
+                    self.completed()
 
     def startup_ready(self):
         """
@@ -166,20 +176,24 @@ class InteractionNode(Node):
         # Human input to confirm canvas is ready
         # Call the service to ask for readiness confirmation
         req = ReadyCheck.Request()
-        req.ready = True
+        req.done_check = False
+        self.waiting_for_keyboard = True
+        future = self.ready_service_client.call_async(req)
+        future.add_done_callback(lambda future: self.startup_ready_keyboard_callback(future))
 
-        self.future = self.ready_service_client.call_async(req)
-        rclpy.spin_until_future_complete(self, self.future)
-
-        if self.future.result().acknowledged:
+    def startup_ready_keyboard_callback(self, future):
+        """
+        Deal with the keyboard information.
+        """
+        response = future.result()
+        self.get_logger().info(str(response.acknowledged))
+        if response.acknowledged == True:
             self.get_logger().info("User acknowledged that the canvas is ready.")
+            time.sleep(1)
             self.state_machine.to_startup_pic()
         else:
-            self.get_logger().info("User did not acknowledge readiness.")
-
-        #done = input("Please press enter when done placing canvas. ENSURE CORRECT LIGHTING.")
-        time.sleep(1)
-        self.state_machine.to_startup_pic()
+            self.get_logger().error("User did not acknowledge canvas readiness.")
+        self.waiting_for_keyboard = False
 
     def startup_pic(self):
         """
@@ -205,8 +219,24 @@ class InteractionNode(Node):
         self.get_logger().info(f'In your_turn method')
         self.num_turns += 1
         # Human input to confirm canvas is ready
-        done = input("Please press enter when done with your turn.")
-        self.state_machine.to_your_turn_pic()
+        req = ReadyCheck.Request()
+        req.done_check = False
+        self.waiting_for_keyboard = True
+        future = self.ready_service_client.call_async(req)
+        future.add_done_callback(lambda future: self.your_turn_keyboard_callback(future))
+
+    def your_turn_keyboard_callback(self, future):
+        """
+        Deal with the keyboard information.
+        """
+        response = future.result()
+        if response.acknowledged:
+            self.get_logger().info("User acknowledged that the canvas is ready.")
+            time.sleep(1)
+            self.state_machine.to_your_turn_pic()
+        else:
+            self.get_logger().error("User did not acknowledge canvas readiness.")
+        self.waiting_for_keyboard = False
 
     def your_turn_pic(self):
         """
@@ -262,19 +292,26 @@ class InteractionNode(Node):
         """
         self.get_logger().info(f'In ask_done method')
         # Human input for if done or not (keyboard).
-        done = input("Please press y and enter if you think the painting is done, \
-            or n and enter if you want to keep going.")
-        while done != "n" and done != "y":
-            if done == "n":
-                self.state_machine.to_your_turn()
-                break
-            elif done == "y":
-                self.state_machine.to_completed()
-                break
-            else:
-                print("Unknown input!")
-            done = input("Please press y and enter if you think the painting is done, \
-            or n and enter if you want to keep going.")
+        req = ReadyCheck.Request()
+        req.done_check = True
+        self.waiting_for_keyboard = True
+        future = self.ready_service_client.call_async(req)
+        future.add_done_callback(lambda future: self.ask_done_keyboard_callback(future))
+
+    def ask_done_keyboard_callback(self, future):
+        """
+        Deal with the keyboard information.
+        """
+        response = future.result()
+        if response.acknowledged:
+            self.get_logger().info("Painting is done!.")
+            time.sleep(1)
+            self.state_machine.to_completed()
+        else:
+            self.get_logger().error("Painting not done, we keep going.")
+            time.sleep(1)
+            self.state_machine.to_your_turn()
+        self.waiting_for_keyboard = False
 
     def completed(self):
         """

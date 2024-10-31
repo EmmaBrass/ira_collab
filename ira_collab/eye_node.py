@@ -9,8 +9,10 @@ from std_msgs.msg import Int16MultiArray
 
 from ira_common.eye_control import EyeControl
 
-from ira_interfaces.msg import SystemState
-from ira_interfaces.msg import FoiCoord
+from ira_interfaces.msg import (
+    SystemState,
+    FoiCoord
+)
 
 import time
 
@@ -48,7 +50,7 @@ class EyeNode(Node):
         """
         Callback function for the system state.
         """
-        self.get_logger().info("In system state callback for eyes!")
+        #self.get_logger().info("In system state callback for eyes!")
         if msg.state == 'startup_ready':
             self.eye_state = "default"
         elif msg.state == 'startup_pic':

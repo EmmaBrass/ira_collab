@@ -11,9 +11,11 @@ from std_msgs.msg import Int16MultiArray
 from ira_common.arm_movements import ArmMovements
 from ira_common.arm_outline import Outline
 
-from ira_interfaces.msg import ArmComplete
-from ira_interfaces.msg import SystemState
-from ira_interfaces.msg import CanvasImage
+from ira_interfaces.msg import (
+    ArmComplete,
+    SystemState,
+    CanvasImage
+)
 
 import time
 
@@ -61,13 +63,13 @@ class ArmNode(Node):
         self.get_logger().info("In canvas_image_callback")
         if msg.type == "initial":
             self.initial_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
-            self.movements.initial_image(self.initial_canvas_image)
+            self.movements.initial_image = self.initial_canvas_image
         if msg.type == "before":
             self.before_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
-            self.movements.before_image(self.before_canvas_image)
+            self.movements.before_image = self.before_canvas_image
         if msg.type == "after":
             self.after_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
-            self.movements.after_image(self.after_canvas_image)
+            self.movements.after_image = self.after_canvas_image
 
     def system_state_callback(self, msg):
         """
@@ -85,7 +87,11 @@ class ArmNode(Node):
                     self.movements.look_at_canvas()
                     self.arm_complete(msg.seq)
                 if msg.state == 'your_turn':
-                    self.movements.canvas_initialise()
+                    canvas_initialised = self.movements.canvas_initialise()
+                    if canvas_initialised == False:
+                        self.get_logger().error("Canvas did not initialise properly!")
+                    else:
+                        self.get_logger().info("Canvas has successfully initialised.")
                     self.movements.lift_up()
                     self.arm_complete(msg.seq)
                 if msg.state == 'your_turn_pic':

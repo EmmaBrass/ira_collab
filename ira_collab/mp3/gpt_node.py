@@ -4,13 +4,15 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
 from cv_bridge import CvBridge, CvBridgeError
-
+bridge = CvBridge()
 
 from ira_common.general_gpt import GPT
 
-from ira_interfaces.msg import GptComplete
-from ira_interfaces.msg import SystemState
-from ira_interfaces.msg import CanvasImage
+from ira_interfaces.msg import (
+    GptComplete,
+    SystemState,
+    CanvasImage
+)
 
 import time, cv2, os
 
@@ -23,8 +25,6 @@ class GPTNode(Node):
 
         self.gpt = GPT(collab=True)
         self.state_seq = -1
-
-        self.bridge = CvBridge()
 
         # To track whether still painting in my_turn
         self.still_painting = False
@@ -66,55 +66,45 @@ class GPTNode(Node):
         if msg.seq > self.state_seq or self.still_painting == True:
             self.state_seq = msg.seq
             if msg.state == 'startup_ready':
-                self.get_logger().info("Sending <startup_ready> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <startup_ready>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
             elif msg.state == 'startup_pic':
-                self.get_logger().info("Sending <startup_pic> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <startup_pic>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
             elif msg.state == 'your_turn':
-                self.get_logger().info("Sending <your_turn> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <your_turn>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
             elif msg.state == 'your_turn_pic':
-                self.get_logger().info("Sending <your_turn_pic> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <your_turn_pic>")
                 self.gpt_complete(msg.seq)
             elif msg.state == 'comment':
-                self.get_logger().info("Sending <comment> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <comment>")
                 self.gpt_complete(msg.seq)
             elif msg.state == 'my_turn':
                 if self.still_painting == False:
-                    self.get_logger().info("Sending <my_turn> command to gpt.")
                     response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn>")
                     self.get_logger().info(response)
                     self.gpt_complete(msg.seq)
                     self.still_painting = True
                 elif self.still_painting == True:
                     time.sleep(5)
-                    self.get_logger().info("Sending <still_my_turn> command to gpt.")
                     response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <still_my_turn>") 
                     self.get_logger().info(response)
                     self.gpt_complete(msg.seq)
             elif msg.state == 'my_turn_pic':
                 self.still_painting = False
                 time.sleep(3) # give time for arm to look down so it seems like IRA has seen her work before she comments.
-                self.get_logger().info("Sending <my_turn_pic> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn_pic>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
             elif msg.state == 'ask_done':
-                self.get_logger().info("Sending <ask_done> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <ask_done>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
             elif msg.state == 'completed':
-                self.get_logger().info("Sending <completed> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <completed>")
                 self.get_logger().info(response)
                 self.gpt_complete(msg.seq)
