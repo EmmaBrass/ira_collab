@@ -5,7 +5,7 @@ from transitions import Machine
 
 class InterationStateMachine():
     
-    states = ['startup_ready', 'startup_pic', 'your_turn', 'your_turn_pic', 'comment', 'my_turn', 'my_turn_pic' 'ask_done', 'completed']
+    states = ['startup_ready', 'startup_pic', 'your_turn', 'your_turn_pic', 'comment', 'my_turn', 'my_turn_pic', 'ask_done', 'completed']
     
     transitions = [
         { 'trigger': 'to_startup_ready', 'source': 'completed', 'dest': 'startup_ready'},

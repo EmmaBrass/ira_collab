@@ -206,7 +206,7 @@ class InteractionNode(Node):
         self.initial_canvas_image = self.latest_image
         msg = CanvasImage()
         msg.image = self.bridge.cv2_to_imgmsg(self.initial_canvas_image, "bgr8")
-        msg.type = "before"
+        msg.type = "initial"
         for i in range(5):
             self.canvas_image_publisher.publish(msg) 
         self.state_machine.to_your_turn()
@@ -260,7 +260,7 @@ class InteractionNode(Node):
         Method for commenting on the human mark.
         The GPT will have commented.
         """
-        self.get_logger().info(f'In comment method') # TODO correct file path for image_gpt.
+        self.get_logger().info(f'In comment method')
         self.state_machine.to_my_turn()
 
     def my_turn(self):
@@ -268,6 +268,7 @@ class InteractionNode(Node):
         Method for IRA taking her turn, saying something while doing it.
         """
         self.get_logger().info(f'In my_turn method')
+        self.state_machine.to_my_turn_pic()
         
     def my_turn_pic(self):
         """

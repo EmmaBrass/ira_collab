@@ -14,7 +14,7 @@ class ReadyCheckServer(Node):
         # If asking the user whether canvas is ready / turn is complete
         if request.done_check == False:
             iterations = 0
-            while iterations < 5:
+            while iterations < 25:
                 self.get_logger().info("Press the 'yes' key when ready.")
                 with keyboard.Events() as events:
                     # Block for as long as possible

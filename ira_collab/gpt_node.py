@@ -7,10 +7,14 @@ from cv_bridge import CvBridge, CvBridgeError
 
 
 from ira_common.general_gpt import GPT
+from ira_common.canvas_analysis import CanvasAnalysis
 
-from ira_interfaces.msg import GptComplete
-from ira_interfaces.msg import SystemState
-from ira_interfaces.msg import CanvasImage
+from ira_interfaces.msg import (
+    GptComplete,
+    SystemState,
+    CanvasImage,
+    ArmPaintingComplete
+)
 
 import time, cv2, os
 
@@ -28,8 +32,13 @@ class GPTNode(Node):
 
         # To track whether still painting in my_turn
         self.still_painting = False
+
+        self.arm_painting_complete = False
         
         self.canvas_image = None
+        self.canvas_file_path = None
+
+        self.canvas_analysis = CanvasAnalysis()
 
         # Initialise publishers
         self.gpt_complete_publisher = self.create_publisher(GptComplete, 'gpt_complete', 10)
@@ -41,6 +50,12 @@ class GPTNode(Node):
             self.canvas_image_callback, 
             10
         )
+        # self.arm_painting_complete_subscription = self.create_subscription(
+        #     ArmPaintingComplete,
+        #     'arm_painting_complete',
+        #     self.arm_painting_complete_callback, 
+        #     10
+        # )
         self.system_state_subscription = self.create_subscription(
             SystemState,
             'system_state',
@@ -57,7 +72,24 @@ class GPTNode(Node):
         Save the most recent cropped foi image.
         """
         self.get_logger().info("In canvas_image_callback")
-        self.canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
+        if msg.type == "initial":
+            self.initial_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
+            self.canvas_analysis._initial_image = self.initial_canvas_image
+            self.get_logger().info("Got initial canvas image in gpt node!")
+        if msg.type == "before":
+            self.before_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
+            self.canvas_analysis._before_image = self.before_canvas_image
+        if msg.type == "after":
+            self.after_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
+            self.canvas_analysis._after_image = self.after_canvas_image
+
+    # def arm_painting_complete_callback(self, msg):
+    #     """
+    #     When the arm painting is complete, update the requisite variable.
+    #     """
+    #     self.get_logger().info("In arm_painting_complete_callback")
+    #     if msg.complete == True:
+    #         self.arm_painting_complete = True
 
     def system_state_callback(self, msg):
         """
@@ -79,30 +111,45 @@ class GPTNode(Node):
                 self.get_logger().info("Sending <your_turn> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <your_turn>")
                 self.get_logger().info(response)
+                canvas_initialised = self.canvas_analysis.canvas_initialise(debug=False)
+                if canvas_initialised == False:
+                    self.get_logger().error("Canvas did not initialise properly!")
+                else:
+                    self.get_logger().info("Canvas has successfully initialised.")
                 self.gpt_complete(msg.seq)
             elif msg.state == 'your_turn_pic':
                 self.get_logger().info("Sending <your_turn_pic> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <your_turn_pic>")
                 self.gpt_complete(msg.seq)
             elif msg.state == 'comment':
+                # call image analysis function to get mark-only image
+                _, _, mark_image = self.canvas_analysis.paint_abstract_mark(debug=False)
+                # Save as a file with a path
+                dir = os.path.dirname(os.path.abspath(__file__))
+                file_path = os.path.join(dir, "mark_image.jpg")
+                cv2.imwrite(file_path, mark_image)
                 self.get_logger().info("Sending <comment> command to gpt.")
-                response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <comment>")
+                response = self.gpt.add_user_message_and_get_response_and_speak(f"The command is: <comment>. The file path is: {file_path}")
                 self.gpt_complete(msg.seq)
             elif msg.state == 'my_turn':
-                if self.still_painting == False:
-                    self.get_logger().info("Sending <my_turn> command to gpt.")
-                    response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn>")
-                    self.get_logger().info(response)
-                    self.gpt_complete(msg.seq)
-                    self.still_painting = True
-                elif self.still_painting == True:
-                    time.sleep(5)
-                    self.get_logger().info("Sending <still_my_turn> command to gpt.")
-                    response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <still_my_turn>") 
-                    self.get_logger().info(response)
-                    self.gpt_complete(msg.seq)
+                self.get_logger().info("Sending <my_turn> command to gpt.")
+                response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn>")
+                self.get_logger().info(response)
+                self.gpt_complete(msg.seq)
+                # if self.still_painting == False:
+                #     self.get_logger().info("Sending <my_turn> command to gpt.")
+                #     response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn>")
+                #     self.get_logger().info(response)
+                #     self.still_painting = True
+                # elif self.still_painting == True:
+                #     self.get_logger().info("Sending <still_my_turn> command to gpt.")
+                #     response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <still_my_turn>") 
+                #     self.get_logger().info(response)
+                # if self.arm_painting_complete == True:
+                #     self.gpt_complete(msg.seq)
             elif msg.state == 'my_turn_pic':
                 self.still_painting = False
+                self.arm_painting_complete = False
                 time.sleep(3) # give time for arm to look down so it seems like IRA has seen her work before she comments.
                 self.get_logger().info("Sending <my_turn_pic> command to gpt.")
                 response = self.gpt.add_user_message_and_get_response_and_speak("The command is: <my_turn_pic>")

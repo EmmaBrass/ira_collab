@@ -14,7 +14,8 @@ from ira_common.arm_outline import Outline
 from ira_interfaces.msg import (
     ArmComplete,
     SystemState,
-    CanvasImage
+    CanvasImage,
+    ArmPaintingComplete
 )
 
 import time
@@ -34,8 +35,15 @@ class ArmNode(Node):
         self.after_canvas_image = None # after humam mark
         self.state_seq = -1
 
+        self.canvas_initialised = False
+
+        self.output_coordinates = None
+        self.color_pot = None
+
         # Initialise publishers
         self.arm_complete_publisher = self.create_publisher(ArmComplete, 'arm_complete', 10) #TODO create a custom message type for this?
+        self.canvas_image_publisher = self.create_publisher(CanvasImage, 'canvas_image', 10)
+        #self.arm_painting_complete_publisher = self.create_publisher(ArmPaintingComplete, 'arm_painting_complete', 10)
 
         # Initialise subscribers
         self.canvas_image_subscription = self.create_subscription(
@@ -64,6 +72,7 @@ class ArmNode(Node):
         if msg.type == "initial":
             self.initial_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
             self.movements.initial_image = self.initial_canvas_image
+            self.get_logger().info("Got initial canvas image in arm node!")
         if msg.type == "before":
             self.before_canvas_image = self.bridge.imgmsg_to_cv2(msg.image)
             self.movements.before_image = self.before_canvas_image
@@ -87,11 +96,13 @@ class ArmNode(Node):
                     self.movements.look_at_canvas()
                     self.arm_complete(msg.seq)
                 if msg.state == 'your_turn':
-                    canvas_initialised = self.movements.canvas_initialise()
-                    if canvas_initialised == False:
-                        self.get_logger().error("Canvas did not initialise properly!")
-                    else:
-                        self.get_logger().info("Canvas has successfully initialised.")
+                    if self.canvas_initialised == False:
+                        canvas_initialised_successfully = self.movements.canvas_initialise(debug=False)
+                        if canvas_initialised_successfully == False:
+                            self.get_logger().error("Canvas did not initialise properly!")
+                        else:
+                            self.get_logger().info("Canvas has successfully initialised.")
+                            self.canvas_initialised = True
                     self.movements.lift_up()
                     self.arm_complete(msg.seq)
                 if msg.state == 'your_turn_pic':
@@ -101,7 +112,9 @@ class ArmNode(Node):
                     self.movements.initial_position()
                     self.arm_complete(msg.seq)
                 if msg.state == 'my_turn':
-                    self.movements.paint_abstract_mark()
+                    output_coordinates, color_pot, _ = self.movements.paint_abstract_mark(debug=False) # TODO if an error with this, make like a random mark
+                    self.movements.paint_marks(output_coordinates, color_pot)
+                    #self.arm_painting_complete()
                     self.arm_complete(msg.seq)
                 if msg.state == 'my_turn_pic':
                     self.movements.look_at_canvas()
@@ -121,6 +134,14 @@ class ArmNode(Node):
         msg.complete = True
         for i in range(5):
             self.arm_complete_publisher.publish(msg)
+
+    # def arm_painting_complete(self):
+    #     self.get_logger().info("In arm_painting_complete")
+    #     msg = ArmPaintingComplete()
+    #     msg.complete = True
+    #     for i in range(5):
+    #         self.arm_painting_complete_publisher.publish(msg)
+
 
         
 
